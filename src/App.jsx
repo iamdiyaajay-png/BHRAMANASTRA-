@@ -7,7 +7,7 @@ import AreaSelectionToolbar from './components/AreaSelectionToolbar';
 import ResultsPanel from './components/ResultsPanel';
 import TourModal from './components/TourModal';
 import { GIBS_LAYERS, getDefaultGibsDate } from './services/gibsLayers';
-import { apiClient, findMatchingStudyArea } from './services/apiClient';
+import { apiClient, findMatchingStudyArea, DEFAULT_STUDY_AREAS } from './services/apiClient';
 
 // Fallback known pre-seeded demo investigations for study areas
 const PRESEEDED_INVESTIGATIONS = {
@@ -55,15 +55,40 @@ export default function App() {
   }, []);
 
   // 2. Monitored Study Areas & Investigation Dates (Step 2)
-  const [studyAreas, setStudyAreas] = useState([]);
-  const [matchedStudyArea, setMatchedStudyArea] = useState(null);
-  const [referenceDate, setReferenceDate] = useState('');
-  const [comparisonDate, setComparisonDate] = useState('');
+  const initialStudyArea = (() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search).get('area');
+      if (p) {
+        const found = DEFAULT_STUDY_AREAS.find(a => a.id === p || a.id.toLowerCase().includes(p.toLowerCase()));
+        if (found) return found;
+      }
+    }
+    return DEFAULT_STUDY_AREAS[0];
+  })();
+
+  const [studyAreas, setStudyAreas] = useState(DEFAULT_STUDY_AREAS);
+  const [matchedStudyArea, setMatchedStudyArea] = useState(initialStudyArea);
+  const [referenceDate, setReferenceDate] = useState(initialStudyArea.default_reference_date);
+  const [comparisonDate, setComparisonDate] = useState(initialStudyArea.default_comparison_date);
 
   // 3. Map Area Selection State
   const [drawMode, setDrawMode] = useState(null);
   const [pointRadiusKm, setPointRadiusKm] = useState(25);
-  const [selectedArea, setSelectedArea] = useState(null);
+  const [selectedArea, setSelectedArea] = useState(() => {
+    const defaultArea = initialStudyArea;
+    const [minLon, minLat, maxLon, maxLat] = defaultArea.bounding_box;
+    const bounds = [[minLat, minLon], [maxLat, maxLon]];
+    const center = { lat: (minLat + maxLat) / 2, lon: (minLon + maxLon) / 2 };
+    const widthKm = Math.abs(maxLon - minLon) * 111.32 * Math.cos(center.lat * Math.PI / 180);
+    const heightKm = Math.abs(maxLat - minLat) * 110.574;
+    return {
+      type: 'Study Area Bounding Box',
+      bounds: bounds,
+      center: center,
+      areaKm2: Math.round(widthKm * heightKm),
+      studyAreaId: defaultArea.id
+    };
+  });
   const [validationError, setValidationError] = useState(null);
 
   // 4. Analytics & Investigation Results State (Step 3)
@@ -73,36 +98,6 @@ export default function App() {
   // 5. UI Shell State
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [isTourOpen, setIsTourOpen] = useState(false);
-
-  // Load available study areas from FastAPI backend on mount
-  useEffect(() => {
-    async function loadStudyAreas() {
-      try {
-        const areas = await apiClient.getStudyAreas();
-        if (Array.isArray(areas) && areas.length > 0) {
-          setStudyAreas(areas);
-          // Set Kerala as initial default study area
-          const defaultArea = areas.find(a => a.id === 'kerala-floods-2018') || areas[0];
-          handleSelectStudyArea(defaultArea);
-        }
-      } catch (err) {
-        console.warn('Could not load study areas from backend:', err.message);
-        // Fallback default Kerala configuration if backend is temporarily offline
-        const fallbackKerala = {
-          id: 'kerala-floods-2018',
-          name: 'Kerala Flood Basin (Periyar River)',
-          bounding_box: [76.15, 9.90, 76.55, 10.30],
-          phenomenon_type: 'flood',
-          expected_behavior: 'receding',
-          default_reference_date: '2018-08-08',
-          default_comparison_date: '2018-08-16'
-        };
-        setStudyAreas([fallbackKerala]);
-        handleSelectStudyArea(fallbackKerala);
-      }
-    }
-    loadStudyAreas();
-  }, []);
 
   // Handler for directly choosing a monitored study area button
   const handleSelectStudyArea = useCallback((area) => {
@@ -135,6 +130,35 @@ export default function App() {
 
     setIsPanelOpen(true);
   }, []);
+
+  // Load available study areas from FastAPI backend on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function loadStudyAreas() {
+      try {
+        const areas = await apiClient.getStudyAreas();
+        if (isMounted && Array.isArray(areas) && areas.length > 0) {
+          setStudyAreas(areas);
+          // Preserve actively selected study area if already picked by user, else keep default
+          setMatchedStudyArea(current => {
+            if (current && areas.some(a => a.id === current.id)) {
+              return current;
+            }
+            const defaultArea = areas.find(a => a.id === initialStudyArea.id) || areas[0];
+            handleSelectStudyArea(defaultArea);
+            return defaultArea;
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load study areas from backend, maintaining verified defaults:', err.message);
+        if (isMounted) {
+          setStudyAreas(DEFAULT_STUDY_AREAS);
+        }
+      }
+    }
+    loadStudyAreas();
+    return () => { isMounted = false; };
+  }, [handleSelectStudyArea, initialStudyArea.id]);
 
   // Handler for custom area selection on the map (drawing rectangle, polygon, or point)
   const handleSelectArea = useCallback((area) => {
@@ -213,6 +237,9 @@ export default function App() {
         if (fallbackId) {
           investigationId = fallbackId;
         } else {
+          if (matchedStudyArea.id === 'wayanad-landslide-2024') {
+            throw new Error('Wayanad Hills Scar is an extended Tier 2 study area. New SAR processing requests require backend authentication or Member 1 pipeline ingest.');
+          }
           throw createErr;
         }
       }
