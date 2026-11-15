@@ -31,9 +31,28 @@ export default function App() {
   };
 
   // 1. Layer & Date State (Step 1)
-  const [selectedLayerId, setSelectedLayerId] = useState('MODIS_Terra_Land_Surface_Temp_Day');
-  const [selectedDate, setSelectedDate] = useState(getDefaultGibsDate());
+  const [selectedLayerId, setSelectedLayerId] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('layer') || 'MODIS_Terra_Land_Surface_Temp_Day';
+  });
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const layer = params.get('layer') || 'MODIS_Terra_Land_Surface_Temp_Day';
+    return params.get('date') || getDefaultGibsDate(layer);
+  });
   const [opacity, setOpacity] = useState(0.75);
+
+  const handleSelectLayer = useCallback((layerId) => {
+    setSelectedLayerId(layerId);
+    if (layerId === 'NISAR_L2_Geocoded_Polarimetric_Covariance') {
+      setSelectedDate(currentDate => {
+        if (!currentDate || currentDate.startsWith('2018') || currentDate.startsWith('2024') || currentDate < '2025-10-29') {
+          return '2026-11-10';
+        }
+        return currentDate;
+      });
+    }
+  }, []);
 
   // 2. Monitored Study Areas & Investigation Dates (Step 2)
   const [studyAreas, setStudyAreas] = useState([]);
@@ -363,7 +382,7 @@ export default function App() {
           {/* Step 1: Satellite Layer & Date Selection */}
           <LayerControls 
             selectedLayerId={selectedLayerId}
-            onSelectLayer={setSelectedLayerId}
+            onSelectLayer={handleSelectLayer}
             selectedDate={selectedDate}
             onDateChange={setSelectedDate}
             opacity={opacity}

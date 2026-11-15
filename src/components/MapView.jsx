@@ -159,6 +159,9 @@ export default function MapView({
       const tileUrl = getGibsTileUrl(selectedLayerId, selectedDate);
       const activeLayer = GIBS_LAYERS.find(l => l.id === selectedLayerId);
       const maxNativeZoom = activeLayer?.maxZoom || 7;
+      const attribution = activeLayer?.isNisar
+        ? '&copy; <a href="https://gibs.earthdata.nasa.gov/" target="_blank" rel="noopener noreferrer">NASA EOSDIS GIBS</a> | <a href="https://nisar.jpl.nasa.gov/" target="_blank" rel="noopener noreferrer">NASA-ISRO NISAR</a>'
+        : '&copy; <a href="https://gibs.earthdata.nasa.gov/" target="_blank" rel="noopener noreferrer">NASA EOSDIS GIBS</a>';
 
       const gibsLayer = L.tileLayer(tileUrl, {
         opacity: opacity,
@@ -166,8 +169,14 @@ export default function MapView({
         tileSize: 256,
         maxNativeZoom: maxNativeZoom,
         maxZoom: 19,
-        attribution: '&copy; <a href="https://gibs.earthdata.nasa.gov/" target="_blank" rel="noopener noreferrer">NASA EOSDIS GIBS</a>'
+        attribution: attribution
       });
+
+      // Gracefully handle unavailable dates/tiles without breaking Leaflet map
+      gibsLayer.on('tileerror', () => {
+        // Transparent fallback: suppress error logs for unavailable swaths
+      });
+
       gibsLayer.addTo(map);
       gibsTileLayerRef.current = gibsLayer;
     }
@@ -558,6 +567,60 @@ export default function MapView({
       {/* Map DOM Element */}
       <div ref={mapContainerRef} className="leaflet-map" style={{ width: '100%', height: '100%' }} />
 
+      {/* Visible Scientific Notice for NISAR L-band GCOV Browse Layer */}
+      {(() => {
+        const activeGibs = GIBS_LAYERS.find(l => l.id === selectedLayerId);
+        if (!activeGibs?.isNisar) return null;
+        const is2018 = selectedDate && selectedDate.startsWith('2018');
+        return (
+          <div style={{
+            position: 'absolute',
+            top: '16px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 400,
+            backgroundColor: 'rgba(15, 23, 42, 0.94)',
+            border: '1px solid #3B82F6',
+            borderRadius: '8px',
+            padding: '10px 14px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.45)',
+            backdropFilter: 'blur(8px)',
+            maxWidth: '580px',
+            width: 'calc(100% - 32px)',
+            color: '#E2E8F0',
+            fontSize: '11px',
+            lineHeight: '1.4'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: '#60A5FA' }}>
+                <span>📡</span>
+                <span>NASA-ISRO NISAR L-band GCOV — Browse Visualization</span>
+              </div>
+              <span style={{ 
+                fontSize: '9px', 
+                padding: '2px 6px', 
+                borderRadius: '4px', 
+                backgroundColor: 'rgba(234, 179, 8, 0.2)', 
+                color: '#FACC15',
+                border: '1px solid rgba(234, 179, 8, 0.4)',
+                fontWeight: 600,
+                whiteSpace: 'nowrap'
+              }}>
+                PROVISIONAL STREAM (SDS P05036)
+              </span>
+            </div>
+            <div style={{ fontSize: '10.5px', color: '#94A3B8' }}>
+              Normalized radar backscatter browse visualization via NASA EOSDIS GIBS. <strong>Visualization only</strong>; not raw HDF5 observation pixels. Kept strictly separate from Sentinel-1 C-band processing.
+            </div>
+            {is2018 && (
+              <div style={{ marginTop: '6px', padding: '4px 8px', borderRadius: '4px', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#FCA5A5', fontSize: '10px' }}>
+                ⚠️ NISAR has no historical observations for 2018 (mission valid 2025–2026). Selected date <code>{selectedDate}</code> has no imagery. Switch date to <code>2026-11-10</code> to view active NISAR swaths.
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Floating Active Layer Color Legend */}
       {(() => {
         const activeGibs = GIBS_LAYERS.find(l => l.id === selectedLayerId);
@@ -577,9 +640,16 @@ export default function MapView({
             minWidth: '220px',
             pointerEvents: 'none'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '5px' }}>
-              <span>{activeGibs.icon}</span>
-              <span>{activeGibs.name}</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', fontSize: '11px', fontWeight: 600, color: 'var(--text)', marginBottom: '5px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>{activeGibs.icon}</span>
+                <span>{activeGibs.name}</span>
+              </div>
+              {activeGibs.isNisar && (
+                <span style={{ fontSize: '9px', color: '#FACC15', backgroundColor: 'rgba(234, 179, 8, 0.2)', padding: '1px 5px', borderRadius: '3px' }}>
+                  Browse Only
+                </span>
+              )}
             </div>
             {activeGibs.gradient && (
               <>

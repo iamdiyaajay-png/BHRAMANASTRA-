@@ -21,6 +21,24 @@ export const GIBS_LAYERS = [
     legendMax: 'Clouds & Ice'
   },
   {
+    id: 'NISAR_L2_Geocoded_Polarimetric_Covariance',
+    name: 'NASA-ISRO NISAR L-band GCOV — Browse Visualization',
+    category: 'SAR Radar (NISAR)',
+    icon: '📡',
+    description: 'Provisional Normalized Radar Backscatter (False Color, GCOV) browse imagery from NASA-ISRO SAR (NISAR). Browse visualization only (PNG/WMTS); not raw HDF5 pixels.',
+    format: 'png',
+    tileMatrixSet: 'GoogleMapsCompatible_Level13',
+    maxZoom: 13,
+    unit: 'L-band GCOV',
+    gradient: 'linear-gradient(90deg, #000004, #51127c, #b63679, #fb8861, #fcfdbf)',
+    legendMin: 'Low Backscatter (Water)',
+    legendMax: 'High Backscatter (Canopy/Urban)',
+    isNisar: true,
+    dataTier: 'Provisional Stream (SDS P05036)',
+    validTemporalStart: '2025-10-29',
+    sampleVerifiedDate: '2026-11-10'
+  },
+  {
     id: 'MODIS_Terra_Land_Surface_Temp_Day',
     name: 'Land Surface Temperature',
     category: 'Temperature',
@@ -63,14 +81,14 @@ export const GIBS_LAYERS = [
     legendMax: '1.0+ AOD (Dense Smoke/Smog)'
   },
   {
-    id: 'MODIS_Terra_NDVI_16Day',
+    id: 'MODIS_Terra_NDVI_8Day',
     name: 'Vegetation Index (NDVI)',
     category: 'Vegetation',
     icon: '🌿',
     description: 'Normalized Difference Vegetation Index showing global plant growth & forest canopy.',
     format: 'png',
-    tileMatrixSet: 'GoogleMapsCompatible_Level8',
-    maxZoom: 8,
+    tileMatrixSet: 'GoogleMapsCompatible_Level9',
+    maxZoom: 9,
     unit: 'NDVI (-1 to 1)',
     gradient: 'linear-gradient(90deg, #d73027, #fee08b, #d9ef8b, #66bd63, #1a9850, #006837)',
     legendMin: '0.0 (Barren/Water)',
@@ -79,9 +97,14 @@ export const GIBS_LAYERS = [
 ];
 
 /**
- * Returns a valid recent date in YYYY-MM-DD format (2 days ago for reliable complete global coverage)
+ * Returns a valid recent date in YYYY-MM-DD format.
+ * For NISAR GCOV, returns 2026-11-10 where validated swaths are catalogued over study basins.
+ * For standard optical/sensor layers, returns 2 days ago for reliable complete global coverage.
  */
-export function getDefaultGibsDate() {
+export function getDefaultGibsDate(layerId) {
+  if (layerId === 'NISAR_L2_Geocoded_Polarimetric_Covariance') {
+    return '2026-11-10';
+  }
   const d = new Date();
   d.setDate(d.getDate() - 2);
   return d.toISOString().split('T')[0];
@@ -92,6 +115,6 @@ export function getDefaultGibsDate() {
  */
 export function getGibsTileUrl(layerId, date) {
   const layer = GIBS_LAYERS.find(l => l.id === layerId) || GIBS_LAYERS[0];
-  const formattedDate = date || getDefaultGibsDate();
+  const formattedDate = date || getDefaultGibsDate(layerId);
   return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layer.id}/default/${formattedDate}/${layer.tileMatrixSet}/{z}/{y}/{x}.${layer.format}`;
 }

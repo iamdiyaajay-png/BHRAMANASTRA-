@@ -36,6 +36,21 @@ export default function LayerControls({
                     {layer.name}
                   </h4>
                   <p>{layer.description}</p>
+                  {layer.dataTier && (
+                    <div style={{ marginTop: '4px' }}>
+                      <span style={{ 
+                        fontSize: '9px', 
+                        padding: '1px 5px', 
+                        borderRadius: '3px', 
+                        backgroundColor: 'rgba(234, 179, 8, 0.15)', 
+                        color: '#FACC15',
+                        border: '1px solid rgba(234, 179, 8, 0.3)',
+                        fontWeight: 600
+                      }}>
+                        {layer.dataTier}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <span className={`data-source-pill ${isSelected ? 'live' : ''}`} style={{ fontSize: '10px' }}>
@@ -78,6 +93,23 @@ export default function LayerControls({
           onChange={(e) => onDateChange(e.target.value)}
           aria-label="Satellite Observation Date"
         />
+        {selectedLayerId === 'NISAR_L2_Geocoded_Polarimetric_Covariance' && (
+          <div style={{ marginTop: '8px', padding: '6px 10px', borderRadius: '6px', backgroundColor: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.25)', fontSize: '11px', color: '#93C5FD', lineHeight: '1.4' }}>
+            <span><strong>NISAR Coverage:</strong> Operational archive begins late 2025. Verified pass over Kerala study basin is <strong>2026-11-10</strong>.</span>
+            {selectedDate !== '2026-11-10' && (
+              <div style={{ marginTop: '4px' }}>
+                <button 
+                  type="button"
+                  className="btn btn-outline" 
+                  style={{ padding: '2px 8px', fontSize: '10px', height: '22px' }}
+                  onClick={() => onDateChange('2026-11-10')}
+                >
+                  Set to 2026-11-10
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="layer-slider-container" style={{ marginTop: '8px' }}>
