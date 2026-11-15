@@ -1,0 +1,97 @@
+:root {
+  --bg: #0B1026;
+  --surface: #151C3B;
+  --surface-hover: #1e2852;
+  --surface-border: #242f60;
+  --primary: #3D5AFE;
+  --primary-hover: #2f49de;
+  --accent: #FF6B35;
+  --accent-hover: #e55a28;
+  --accent-glow: rgba(255, 107, 53, 0.35);
+  --text: #F5F7FA;
+  --text-muted: #8e9bb4;
+  --text-dim: #5c6882;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+  
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.6);
+  --shadow-accent: 0 0 20px var(--accent-glow);
+  
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+[data-theme="light"] {
+  --bg: #F1F4F9;
+  --surface: #FFFFFF;
+  --surface-hover: #F8FAFC;
+  --surface-border: #CBD5E1;
+  --primary: #3D5AFE;
+  --primary-hover: #2f49de;
+  --accent: #FF6B35;
+  --accent-hover: #e55a28;
+  --accent-glow: rgba(255, 107, 53, 0.25);
+  --text: #0F172A;
+  --text-muted: #64748B;
+  --text-dim: #94A3B8;
+  --success: #10B981;
+  --warning: #D97706;
+  --danger: #DC2626;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.09);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Accessibility & Focus States */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
