@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getGibsTileUrl, GIBS_LAYERS } from '../services/gibsLayers';
 import { searchLocation } from '../services/geocoding';
+import { BilingualLabelsController } from '../services/bilingualLabelLayer';
 
 // Styling for the selected area
 const SELECTION_STYLE = {
@@ -73,6 +74,8 @@ export default function MapView({
   const previewLayerRef = useRef(null);
   const studyAreasLayerRef = useRef(null);
   const changeMaskLayerRef = useRef(null);
+  const searchMarkerRef = useRef(null);
+  const bilingualLabelsRef = useRef(null);
 
   // Drawing state refs
   const drawStateRef = useRef({
@@ -81,11 +84,68 @@ export default function MapView({
   });
 
   // Search state
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('search') || '';
+  });
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [geoNotice, setGeoNotice] = useState(null);
   const [showKeyWarning, setShowKeyWarning] = useState(!import.meta.env.VITE_MAPTILER_KEY);
+  const [showBilingualLabels, setShowBilingualLabels] = useState(true);
+
+  // Navigate camera and place visual indicator for searched location
+  const navigateToSearchResult = useCallback((result) => {
+    const map = mapRef.current;
+    if (!map || !result) return;
+
+    // 1. Remove previous search marker
+    if (searchMarkerRef.current) {
+      map.removeLayer(searchMarkerRef.current);
+      searchMarkerRef.current = null;
+    }
+
+    // 2. Clear previous study area selection to avoid misleading state
+    if (onClearArea) {
+      onClearArea();
+    }
+
+    // 3. Move map with appropriate zoom / bounding box
+    if (result.bounds && Array.isArray(result.bounds) && result.bounds.length === 2) {
+      try {
+        map.fitBounds(result.bounds, { maxZoom: result.zoom || 11, padding: [40, 40], animate: true });
+      } catch {
+        map.setView([result.lat, result.lon], result.zoom || 5, { animate: true });
+      }
+    } else {
+      map.setView([result.lat, result.lon], result.zoom || 10, { animate: true });
+    }
+
+    // 4. Place visual search marker with popup
+    const marker = L.marker([result.lat, result.lon], {
+      icon: L.divIcon({
+        className: 'search-location-marker',
+        html: '<div style="background-color:#FF6B35; width:16px; height:16px; border-radius:50%; border:2.5px solid #FFFFFF; box-shadow:0 0 12px rgba(255,107,53,0.9);"></div>',
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      })
+    });
+
+    marker.bindPopup(`
+      <div style="font-family: sans-serif; font-size: 12px; color: #0F172A; line-height: 1.4; padding: 2px;">
+        <strong style="color: #FF6B35; font-size: 13px;">📍 ${result.name}</strong><br/>
+        <span style="font-size: 11px; color: #64748B;">Lat: ${result.lat.toFixed(4)}°, Lon: ${result.lon.toFixed(4)}°</span>
+        ${result.type ? `<br/><span style="font-size: 10px; color: #8E9BB4; text-transform: uppercase;">Type: ${result.type}</span>` : ''}
+      </div>
+    `);
+
+    marker.addTo(map);
+    marker.openPopup();
+    searchMarkerRef.current = marker;
+
+    setSearchQuery(result.name);
+    setGeoNotice(`📍 Located: ${result.name}`);
+  }, [onClearArea]);
 
   // 1. Initialize Map
   useEffect(() => {
@@ -102,13 +162,37 @@ export default function MapView({
     // Zoom controls on top right
     L.control.zoom({ position: 'topright' }).addTo(map);
 
+    // Initialize Bilingual Labels Layer Overlay
+    const bilingualController = new BilingualLabelsController(map, { enabled: true });
+    bilingualLabelsRef.current = bilingualController;
+
     mapRef.current = map;
 
+    // Check if initial search query is present in URL
+    const params = new URLSearchParams(window.location.search);
+    const initialQuery = params.get('search');
+    if (initialQuery && initialQuery.trim()) {
+      searchLocation(initialQuery.trim()).then(results => {
+        if (results && results.length > 0) {
+          navigateToSearchResult(results[0]);
+        }
+      });
+    }
+
     return () => {
+      bilingualController.destroy();
+      bilingualLabelsRef.current = null;
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [navigateToSearchResult]);
+
+  // 1a. Toggle Bilingual Labels Layer
+  useEffect(() => {
+    if (bilingualLabelsRef.current) {
+      bilingualLabelsRef.current.setEnabled(showBilingualLabels);
+    }
+  }, [showBilingualLabels]);
 
   // 1b. Basemap Tile Layer (Updates dynamically when theme toggles)
   useEffect(() => {
@@ -437,39 +521,32 @@ export default function MapView({
 
   // Handle Search Execution
   const handleSearch = async (e) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
+    if (e && e.preventDefault) e.preventDefault();
+    const query = searchQuery.trim();
+    if (!query) return;
 
     setIsSearching(true);
     setGeoNotice(null);
     try {
-      const results = await searchLocation(searchQuery);
+      const results = await searchLocation(query);
       setSearchResults(results);
       if (results.length === 0) {
-        setGeoNotice('No matching locations found.');
+        setGeoNotice(`No locations found for "${query}". Check spelling or try a broader name.`);
+      } else {
+        // Automatically navigate map to the top result
+        navigateToSearchResult(results[0]);
       }
-    } catch {
-      setGeoNotice('Failed to search location.');
+    } catch (err) {
+      console.warn('Geocoding error:', err);
+      setGeoNotice('Geocoding service unavailable. Please check connection.');
     } finally {
       setIsSearching(false);
     }
   };
 
   const handleSelectSearchResult = (result) => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    map.setView([result.lat, result.lon], 9, { animate: true });
+    navigateToSearchResult(result);
     setSearchResults([]);
-    setSearchQuery(result.name);
-
-    // Auto-select as point radius
-    onSelectArea({
-      type: 'Point Radius',
-      center: { lat: result.lat, lon: result.lon },
-      radiusKm: pointRadiusKm,
-      areaKm2: Math.round(Math.PI * pointRadiusKm * pointRadiusKm)
-    });
   };
 
   return (
@@ -491,7 +568,15 @@ export default function MapView({
                 type="button" 
                 className="btn btn-ghost" 
                 style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', padding: '2px 6px', fontSize: '10px' }}
-                onClick={() => { setSearchQuery(''); setSearchResults([]); }}
+                onClick={() => { 
+                  setSearchQuery(''); 
+                  setSearchResults([]); 
+                  setGeoNotice(null);
+                  if (searchMarkerRef.current && mapRef.current) {
+                    mapRef.current.removeLayer(searchMarkerRef.current);
+                    searchMarkerRef.current = null;
+                  }
+                }}
                 aria-label="Clear search query"
               >
                 ✕
@@ -528,6 +613,32 @@ export default function MapView({
             ))}
           </ul>
         )}
+      </div>
+
+      {/* Bilingual Labels Overlay Toggle (Top Right, beside Leaflet Zoom Controls) */}
+      <div style={{ position: 'absolute', top: '16px', right: '56px', zIndex: 400 }}>
+        <button 
+          type="button" 
+          className={`btn ${showBilingualLabels ? 'btn-primary' : 'btn-outline'}`}
+          style={{ 
+            height: '36px', 
+            padding: '0 12px', 
+            fontSize: '11px', 
+            fontWeight: 600, 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '6px',
+            boxShadow: 'var(--shadow-sm)',
+            backdropFilter: 'blur(6px)',
+            cursor: 'pointer'
+          }}
+          onClick={() => setShowBilingualLabels(prev => !prev)}
+          aria-label="Toggle Bilingual Geographic Labels"
+          title="Toggle bilingual geographic names (Local · English)"
+        >
+          <span>🏷️</span>
+          <span>Bilingual Labels: <strong>{showBilingualLabels ? 'ON' : 'OFF'}</strong></span>
+        </button>
       </div>
 
       {/* MapTiler Missing Notice (Collapsible Banner) */}

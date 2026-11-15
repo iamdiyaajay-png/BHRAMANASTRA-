@@ -8,10 +8,10 @@
 export const GIBS_LAYERS = [
   {
     id: 'MODIS_Terra_CorrectedReflectance_TrueColor',
-    name: 'Satellite True Color',
+    name: 'Satellite True Color (MODIS Terra)',
     category: 'Imagery',
     icon: '🛰️',
-    description: 'Natural optical true-color satellite imagery from MODIS Terra as seen from orbit.',
+    description: 'Natural optical true-color satellite imagery from MODIS Terra (250m) via NASA EOSDIS GIBS.',
     format: 'jpg',
     tileMatrixSet: 'GoogleMapsCompatible_Level9',
     maxZoom: 9,
