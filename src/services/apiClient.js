@@ -56,8 +56,9 @@ export const DEFAULT_STUDY_AREAS = [
 
 /**
  * Standard HTTP Request Wrapper with standardized PRD Error Handling
+ * Includes automatic retry for Render free-tier cold starts (502/503/network hiccup)
  */
-async function request(endpoint, options = {}) {
+async function request(endpoint, options = {}, retries = 2) {
   const url = `${API_BASE}${endpoint}`;
   const headers = {
     'Accept': 'application/json',
@@ -69,40 +70,57 @@ async function request(endpoint, options = {}) {
     options.body = JSON.stringify(options.body);
   }
 
-  try {
-    const response = await fetch(url, { ...options, headers });
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(url, { ...options, headers });
 
-    if (!response.ok) {
-      let errorData;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = {
-          code: 'HTTP_ERROR',
-          message: `Request failed with status ${response.status}: ${response.statusText}`,
-          suggested_action: 'Check backend server logs and network connectivity.'
-        };
+      if (!response.ok) {
+        // If 502, 503, 504 (typical during Render instance spin-up), retry before throwing
+        if ([502, 503, 504].includes(response.status) && attempt < retries) {
+          console.warn(`Render backend returning HTTP ${response.status} (likely cold-starting). Retrying in 2s...`);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = {
+            code: 'HTTP_ERROR',
+            message: `Request failed with status ${response.status}: ${response.statusText}`,
+            suggested_action: 'Check backend server logs and network connectivity.'
+          };
+        }
+        const error = new Error(errorData.message || `HTTP ${response.status}`);
+        error.status = response.status;
+        error.code = errorData.code;
+        error.suggested_action = errorData.suggested_action;
+        error.details = errorData;
+        throw error;
       }
-      const error = new Error(errorData.message || `HTTP ${response.status}`);
-      error.status = response.status;
-      error.code = errorData.code;
-      error.suggested_action = errorData.suggested_action;
-      error.details = errorData;
-      throw error;
-    }
 
-    // Handle JSON vs Text/Blob responses
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/json') || contentType.includes('application/geo+json')) {
-      return await response.json();
+      // Handle JSON vs Text/Blob responses
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json') || contentType.includes('application/geo+json')) {
+        return await response.json();
+      }
+      return await response.text();
+    } catch (err) {
+      if (err.status) throw err;
+      // If network failure during cold-start or connection establishment, retry if attempts remain
+      if (attempt < retries) {
+        console.warn(`Attempt ${attempt + 1} connecting to backend failed (${err.message}). Retrying in 2s...`);
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      const isRemote = url.includes('onrender.com') || import.meta.env.PROD;
+      const networkError = new Error(`Network failure connecting to ${url}: ${err.message}`);
+      networkError.code = 'NETWORK_ERROR';
+      networkError.suggested_action = isRemote
+        ? 'Backend may be cold-starting (30-50s) or requires CORS origin https://bhramanastra.vercel.app in BHNMISNTRA_CORS_ORIGINS.'
+        : 'Ensure FastAPI backend is running on localhost:8000.';
+      throw networkError;
     }
-    return await response.text();
-  } catch (err) {
-    if (err.status) throw err;
-    const networkError = new Error(`Network failure connecting to ${url}: ${err.message}`);
-    networkError.code = 'NETWORK_ERROR';
-    networkError.suggested_action = 'Ensure FastAPI backend is running on localhost:8000.';
-    throw networkError;
   }
 }
 
